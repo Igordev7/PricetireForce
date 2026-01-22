@@ -6,18 +6,19 @@ import { Lock, Mail, Activity } from 'lucide-react';
 export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    // Conectando com seu Back-end Python
     try {
+      // AGORA SIM: Envia o email e a password que você digitou nos inputs
       const response = await fetch('http://localhost:8000/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password: 'senha-teste' }),
+        body: JSON.stringify({ email, password }), 
       });
       
       const data = await response.json();
@@ -25,13 +26,12 @@ export default function LoginPage() {
       if (data.status === 'sucesso') {
         localStorage.setItem('user_company', data.company);
         localStorage.setItem('user_email', data.user);
-        
-        // Redireciona para o dashboard (vamos criar jaja)
         router.push('/dashboard');
-      }else{
-        alert('Login falhoy: ' + data.message);
+      } else {
+        alert('Login falhou: ' + data.message);
       }
     } catch (error) {
+      console.error(error);
       alert("Erro ao conectar com o servidor");
     } finally {
       setLoading(false);
@@ -76,6 +76,8 @@ export default function LoginPage() {
               <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-500" />
               <input 
                 type="password" 
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-md py-2 pl-10 pr-4 text-white placeholder-slate-500 focus:outline-none focus:border-yellow-500 focus:ring-1 focus:ring-yellow-500"
                 placeholder="••••••••"
                 required

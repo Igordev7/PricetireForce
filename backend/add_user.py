@@ -2,13 +2,13 @@ from database import SessionLocal, User
 
 def create_new_user():
     print("Cadastro de novo CLiente")
-    email = input("Digite o Email do cliente")
-    password= input("Digite a senha:")
-    company= input("Nome da Empresa:")
+    email = input("Digite o Email do cliente: ")
+    password= input("Digite a senha: ")
+    company= input("Nome da Empresa: ")
 
     db = SessionLocal()
 
-    existing_user = db.query(User).filter(User.email == email).firts()
+    existing_user = db.query(User).filter(User.email == email).first()
     if existing_user:
         print(f"O emaiil {email} ja está caastrado!")
         return

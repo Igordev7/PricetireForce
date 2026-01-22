@@ -2,13 +2,20 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, DateTime, 
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
+import os 
 
-# Cria o arquivo do banco SQLite
-SQLALCHEMY_DATABASE_URL = "sqlite:///./tireforce.db"
+# --- CORREÇÃO DO CAMINHO DO BANCO ---
+# Isso pega a pasta onde este arquivo (database.py) está, não importa onde o terminal esteja
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+db_path = os.path.join(BASE_DIR, "tireforce.db")
+
+SQLALCHEMY_DATABASE_URL = f"sqlite:///{db_path}"
+# ------------------------------------
 
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
 
 # --- MODELOS (TABELAS) ---
 class User(Base):

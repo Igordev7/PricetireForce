@@ -31,9 +31,28 @@ class LoginRequest(BaseModel):
 
 @app.post("/login")
 def login(data: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
-    if not user or user.password != data.password:
-        return {"status": "erro", "message": "Dados incorretos"}
+    print(f"Tentativa: {data.email} | Senha: {data.password}")
+
+    # 1. Limpeza dos dados de entrada (O Segredo!)
+    email_limpo = data.email.strip()  # Remove espaços antes e depois
+    senha_limpa = data.password.strip() # Remove espaços da senha digitada
+
+    # 2. Busca o usuário (Filtrando sem diferenciar maiúscula/minúscula se o banco permitir, mas aqui garantimos o email exato)
+    # Dica: No SQLite, o email pode ter sido salvo com espaço também. Vamos tratar isso.
+    user = db.query(User).filter(User.email == email_limpo).first()
+    
+    # 3. Validação Robusta
+    if not user:
+        return {"status": "erro", "message": "Email não cadastrado."}
+    
+    # Compara a senha digitada (limpa) com a senha do banco (que pode ter espaço, então limpamos também)
+    senha_banco_limpa = user.password.strip()
+
+    if senha_banco_limpa != senha_limpa:
+        print(f"❌ Senha errada! Banco: '{senha_banco_limpa}' vs Digitado: '{senha_limpa}'")
+        return {"status": "erro", "message": "Senha incorreta."}
+    
+    # 4. Sucesso
     return {"status": "sucesso", "user": user.email, "company": user.company}
 
 # --- NOVA ROTA: UPLOAD DE ARQUIVO ---
