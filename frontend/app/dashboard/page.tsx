@@ -116,11 +116,11 @@ export default function Dashboard() {
     if (filters.search) params.append('search', filters.search);
 
     try {
-      const res = await fetch(`http://localhost:8000/dashboard-data?${params.toString()}`);
+      const res = await fetch(`https://pricetireforce.onrender.com/dashboard-data?${params.toString()}`);
       const json = await res.json();
       setData(json);
 
-      const resAnal = await fetch(`http://localhost:8000/analytics?${params.toString()}`);
+      const resAnal = await fetch(`https://pricetireforce.onrender.com/analytics?${params.toString()}`);
       const jsonAnal = await resAnal.json();
       setAnalytics(jsonAnal);
     } catch (err) { console.error("Erro ao buscar dados", err); }
@@ -143,7 +143,7 @@ export default function Dashboard() {
     const formData = new FormData();
     formData.append('file', file);
     try {
-      const res = await fetch('http://localhost:8000/upload', { method: 'POST', body: formData });
+      const res = await fetch('https://pricetireforce.onrender.com/upload', { method: 'POST', body: formData });
       const result = await res.json();
       alert(result.mensagem);
       fetchData();

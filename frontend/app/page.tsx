@@ -15,7 +15,7 @@ export default function LoginPage() {
 
     try {
       // AGORA SIM: Envia o email e a password que você digitou nos inputs
-      const response = await fetch('http://localhost:8000/login', {
+      const response = await fetch('https://pricetireforce.onrender.com/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }), 
