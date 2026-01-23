@@ -40,7 +40,10 @@ class PriceHistory(Base):
     id = Column(Integer, primary_key=True, index=True)
     product_id = Column(Integer, ForeignKey("products.id"))
     competitor = Column(String)
-    price = Column(Float)
+    price = Column(Float) # Preço de Venda (Sell Out)
+    mkp = Column(Float, default=0.0)     # Coluna para o Markup
+    origin = Column(String, default="-")
+    sell_in = Column(Float, default=0.0)
     date_collected = Column(DateTime, default=datetime.utcnow)
     source = Column(String)
     region = Column(String, default="BR") # Ex: Norte, Sul

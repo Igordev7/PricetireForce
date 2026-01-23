@@ -1,7 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc, or_  # <--- IMPORTANTE: Importamos o or_ para a busca
+from sqlalchemy import func, desc, or_
 from pydantic import BaseModel
 import pandas as pd
 import io
@@ -28,27 +28,27 @@ def get_db():
     finally:
         db.close()
 
-# --- MAPA INTELIGENTE (ADICIONEI 'DATE') ---
+# --- MAPA DE NOMES ---
 MAPA_INTELIGENTE = {
-    'brand': ['marca', 'brand', 'fabricante', 'montadora'],
-    'model': ['modelo', 'model', 'pattern', 'desenho', 'perfil'],
-    'width': ['medida', 'dimension', 'largura', 'width'],
+    'brand': ['marca', 'brand', 'fabricante'],
+    'model': ['modelo', 'model', 'pattern', 'desenho'],
+    'width': ['medida', 'dimension', 'largura'],
     'rim': ['aro', 'rim', 'diametro', 'raio'],
-    'price': ['preco', 'preço', 'price', 'sell out', 'sellout', 'valor', 'r$', 'custo'],
-    'competitor': ['empresa', 'competitor', 'concorrente', 'loja', 'distribuidor', 'revenda'],
-    'location': ['localidade', 'local', 'cidade/uf', 'region', 'regiao', 'city', 'cidade'],
-    'date': ['data', 'date', 'data coleta', 'coleta', 'dt'] # <--- Novo: Data
+    'price': ['preco_sell_out', 'preco sell out', 'sell out', 'sellout', 'preço venda', 'venda', 'valor'],
+    'cost': ['preço sell in', 'preco sell in', 'sell in', 'sellin', 'custo', 'compra'],
+    'origin': ['origem', 'origin', 'nacional', 'importado'],
+    'competitor': ['empresa', 'competitor', 'concorrente', 'loja', 'revenda'], # Prioridade alta
+    'location': ['localidade', 'local', 'cidade/uf', 'region', 'city', 'cidade'],
+    'date': ['data', 'date', 'data coleta', 'coleta'],
+    'mkp': ['mkp', 'markup', 'margem']
 }
 
 ESTADO_PARA_REGIAO = {
-    'AM': 'NO', 'RR': 'NO', 'AP': 'NO', 'PA': 'NO', 'TO': 'NO', 'RO': 'NO', 'AC': 'NO',
+    'AM': 'NO', 'RR': 'NO', 'AP': 'NO', 'PA': 'NO', 'MT': 'CO', 'MS': 'CO', 'GO': 'CO', 'DF': 'CO',
     'MA': 'NE', 'PI': 'NE', 'CE': 'NE', 'RN': 'NE', 'PB': 'NE', 'PE': 'NE', 'AL': 'NE', 'SE': 'NE', 'BA': 'NE',
-    'MT': 'CO', 'MS': 'CO', 'GO': 'CO', 'DF': 'CO',
-    'SP': 'SE', 'RJ': 'SE', 'ES': 'SE', 'MG': 'SE',
-    'PR': 'S', 'RS': 'S', 'SC': 'S'
+    'SP': 'SE', 'RJ': 'SE', 'ES': 'SE', 'MG': 'SE', 'PR': 'S', 'RS': 'S', 'SC': 'S'
 }
 
-# --- FUNÇÕES DE LIMPEZA ---
 def limpar_aro(valor):
     if pd.isna(valor) or str(valor).strip() == '': return "0"
     s = str(valor).upper().replace('R', '').replace('ARO', '').strip().replace(',', '.')
@@ -63,37 +63,70 @@ def limpar_aro(valor):
 def limpar_empresa(nome):
     if pd.isna(nome): return "Desconhecido"
     nome = str(nome).strip().title()
-    padrao = r'\s+(Ltda|S\.A\.?|S/A|Me|Eireli)\.?$'
-    return re.sub(padrao, '', nome, flags=re.IGNORECASE).strip()
-
-def encontrar_coluna(df, chave_padrao):
-    possiveis_nomes = MAPA_INTELIGENTE.get(chave_padrao, [])
-    for nome_procurado in possiveis_nomes:
-        for col_real in df.columns:
-            if nome_procurado in str(col_real).lower(): return col_real
-    return None
+    return re.sub(r'\s+(Ltda|S\.A\.?|S/A|Me|Eireli)\.?$', '', nome, flags=re.IGNORECASE).strip()
 
 def parse_data(valor_data):
-    """ Tenta converter a data da planilha para o formato do banco """
-    if pd.isna(valor_data) or str(valor_data).strip() == '':
-        return datetime.now()
-    
+    if pd.isna(valor_data) or str(valor_data).strip() == '': return datetime.now()
     texto = str(valor_data).strip()
-    # Tenta formatos comuns no Brasil
-    formatos = ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y', '%d/%m/%y']
-    
-    for fmt in formatos:
-        try:
-            return datetime.strptime(texto, fmt)
-        except:
-            continue
-    # Se for timestamp do Pandas/Excel
-    try:
-        return pd.to_datetime(valor_data).to_pydatetime()
-    except:
-        return datetime.now()
+    for fmt in ['%d/%m/%Y', '%Y-%m-%d', '%d-%m-%Y']:
+        try: return datetime.strptime(texto, fmt)
+        except: continue
+    try: return pd.to_datetime(valor_data).to_pydatetime()
+    except: return datetime.now()
 
-# --- ROTAS ---
+def tratar_preco(valor):
+    try: return float(str(valor).replace('R$', '').replace(' ', '').replace(',', '.'))
+    except: return 0.0
+
+# --- CÉREBRO DE COLUNAS (LÓGICA DE MELHOR CANDIDATO) ---
+def identificar_colunas(df):
+    colunas_encontradas = {}
+    cols_originais = list(df.columns)
+    cols_lower = [str(c).lower().strip() for c in cols_originais]
+    
+    # 1. Acha Coluna de PREÇO DE VENDA (A Âncora)
+    # Procuramos termos de "Sell Out" explicitamente
+    idx_price = -1
+    melhor_pontuacao = -1
+    
+    for i, col in enumerate(cols_lower):
+        pontuacao = 0
+        if 'sell in' in col or 'custo' in col: continue # Pula custo
+        
+        if 'sell out' in col or 'sellout' in col: pontuacao += 100
+        elif 'preco' in col or 'preço' in col: pontuacao += 50
+        
+        if pontuacao > melhor_pontuacao:
+            melhor_pontuacao = pontuacao
+            colunas_encontradas['price'] = cols_originais[i]
+            idx_price = i
+
+    if idx_price == -1: return None # Sem preço, sem jogo
+
+    # 2. Para cada campo (Brand, Competitor, etc), escolhe a MELHOR coluna
+    # A melhor coluna é a que bate o nome E está mais perto do preço de venda
+    for chave in ['brand', 'model', 'width', 'rim', 'competitor', 'location', 'date', 'cost', 'origin', 'mkp']:
+        possiveis_nomes = MAPA_INTELIGENTE.get(chave, [])
+        candidatos = []
+
+        for i, col in enumerate(cols_lower):
+            # Se for o próprio preço ou custo (quando procurando preço), ignora
+            if i == idx_price and chave == 'cost': continue
+
+            # Se contiver o nome buscado
+            if any(nome in col for nome in possiveis_nomes):
+                distancia = abs(i - idx_price)
+                # Se for nome EXATO, ganha bonus de prioridade (distancia negativa virtual)
+                if col in possiveis_nomes: distancia -= 1000 
+                candidatos.append((distancia, cols_originais[i]))
+        
+        # Ordena candidatos pela menor distância (ou prioridade exata)
+        if candidatos:
+            candidatos.sort(key=lambda x: x[0])
+            colunas_encontradas[chave] = candidatos[0][1] # Pega o campeão
+
+    return colunas_encontradas
+
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -108,46 +141,60 @@ def login(data: LoginRequest, db: Session = Depends(get_db)):
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db)):
     contents = await file.read()
+    filename = file.filename.lower()
+    
+    # Define local padrão
+    cidade_arq, regiao_arq = "Manaus", "NO"
+    if "cuiaba" in filename or "cuiabá" in filename: cidade_arq, regiao_arq = "Cuiabá - MT", "CO"
+    elif "sp" in filename: cidade_arq, regiao_arq = "São Paulo - SP", "SE"
+
     try:
-        if file.filename.endswith('.csv'):
-            df = pd.read_csv(io.BytesIO(contents), sep=None, engine='python')
-        else:
-            df = pd.read_excel(io.BytesIO(contents))
+        if file.filename.endswith('.csv'): df = pd.read_csv(io.BytesIO(contents), sep=None, engine='python')
+        else: df = pd.read_excel(io.BytesIO(contents))
     except: return {"status": "erro", "message": "Arquivo ilegível."}
 
-    # Identifica colunas
-    col_marca, col_modelo = encontrar_coluna(df, 'brand'), encontrar_coluna(df, 'model')
-    col_medida, col_aro = encontrar_coluna(df, 'width'), encontrar_coluna(df, 'rim')
-    col_preco, col_concorrente = encontrar_coluna(df, 'price'), encontrar_coluna(df, 'competitor')
-    col_local, col_data = encontrar_coluna(df, 'location'), encontrar_coluna(df, 'date') # <--- Pega coluna data
+    mapa = identificar_colunas(df)
+    if not mapa or 'price' not in mapa or 'width' not in mapa:
+        return {"status": "erro", "message": "Colunas essenciais não identificadas."}
 
-    if not col_preco or not col_medida: return {"status": "erro", "message": "Colunas essenciais não encontradas."}
-
+    c = lambda k: mapa.get(k) # Atalho para pegar nome da coluna
     count = 0
+    
     for _, row in df.iterrows():
         try:
-            marca = str(row[col_marca]).upper().strip() if col_marca else "GENÉRICA"
-            modelo = str(row[col_modelo]).upper().strip() if col_modelo else "PADRÃO"
-            medida = str(row[col_medida]).strip() if col_medida else "N/A"
-            aro = limpar_aro(row[col_aro] if col_aro else "0")
-            competitor = limpar_empresa(row[col_concorrente] if col_concorrente else "Concorrente")
+            # Leituras
+            marca = str(row[c('brand')]).upper().strip() if c('brand') else "GENÉRICA"
+            modelo = str(row[c('model')]).upper().strip() if c('model') else "PADRÃO"
+            medida = str(row[c('width')]).strip() if c('width') else "N/A"
+            aro = limpar_aro(row[c('rim')] if c('rim') else "0")
+            
+            # Aqui vai pegar a coluna 'Empresa' correta agora
+            competitor = limpar_empresa(row[c('competitor')] if c('competitor') else "Concorrente")
+            
+            data_col = parse_data(row[c('date')]) if c('date') else datetime.now()
+            
+            origem = "-"
+            if c('origin'):
+                raw_o = str(row[c('origin')]).strip().upper()
+                if "NAC" in raw_o: origem = "NACIONAL"
+                elif "IMP" in raw_o: origem = "IMPORTADO"
+            
+            p_venda = tratar_preco(row[c('price')])
+            p_custo = tratar_preco(row[c('cost')]) if c('cost') else 0.0
+            
+            v_mkp = 0.0
+            if c('mkp'):
+                try: v_mkp = float(str(row[c('mkp')]).replace(',', '.'))
+                except: v_mkp = 0.0
 
-            # DATA: Se tiver coluna, usa. Senão, usa HOJE.
-            data_coleta = parse_data(row[col_data]) if col_data else datetime.now()
-
-            preco = 0.0
-            try:
-                val = str(row[col_preco]).replace('R$', '').replace(' ', '').replace(',', '.')
-                preco = float(val)
-            except: pass
-
-            city, region = "Manaus", "NO"
-            if col_local:
-                raw_local = str(row[col_local]).strip()
-                if '-' in raw_local:
-                    city, uf = raw_local.split('-')[:2]
-                    region = ESTADO_PARA_REGIAO.get(uf.strip().upper(), 'NO')
-                else: city = raw_local
+            # Cidade: Se não tiver na coluna, usa a do arquivo
+            city = cidade_arq
+            region = regiao_arq
+            if c('location'):
+                raw_l = str(row[c('location')]).strip()
+                if len(raw_l) > 2:
+                    city = raw_l
+                    if '-' in raw_l: region = ESTADO_PARA_REGIAO.get(raw_l.split('-')[1].strip().upper(), region)
 
             unique_code = f"{marca}-{modelo}-{medida}".replace(" ", "").replace("/", "")
             produto = db.query(Product).filter(Product.unique_code == unique_code).first()
@@ -158,68 +205,68 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
                 db.refresh(produto)
 
             novo = PriceHistory(
-                product_id=produto.id, 
-                competitor=competitor, 
-                price=preco, 
-                region=region, 
-                city=city, 
-                date_collected=data_coleta, # <--- Usa a data certa
-                source="UPLOAD"
+                product_id=produto.id, competitor=competitor, price=p_venda, sell_in=p_custo,
+                origin=origem, mkp=v_mkp, region=region, city=city, date_collected=data_col, source="UPLOAD"
             )
             db.add(novo)
             count += 1
         except: continue
     
     db.commit()
-    return {"status": "sucesso", "mensagem": f"{count} registros salvos."}
+    return {"status": "sucesso", "mensagem": f"{count} registros importados. Local: {city}"}
 
-# --- FUNÇÃO CENTRAL DE FILTROS ---
-def aplicar_filtros(query, region, brand, rim, competitor, search):
-    if region and region != "Todas": query = query.filter(PriceHistory.region == region)
-    if brand and brand != "Todas": query = query.filter(Product.brand == brand)
-    if rim and rim != "Todos": query = query.filter(Product.rim == rim)
-    if competitor and competitor != "Todos": query = query.filter(PriceHistory.competitor == competitor)
+# --- FILTROS MULTIPLOS ---
+def aplicar_filtros(query, region, brand, rim, competitor, origin, search):
+    if region and "Toda" not in region: query = query.filter(PriceHistory.region == region)
+    if origin and "Toda" not in origin: query = query.filter(PriceHistory.origin == origin)
+
+    # Listas
+    if brand and "Toda" not in brand:
+        lista = [x for x in brand.split(',') if x and "Toda" not in x]
+        if lista: query = query.filter(Product.brand.in_(lista))
+
+    if rim and "Todo" not in rim:
+        lista = [x for x in rim.split(',') if x and "Todo" not in x]
+        if lista: query = query.filter(Product.rim.in_(lista))
+
+    if competitor and "Todo" not in competitor:
+        lista = [x for x in competitor.split(',') if x and "Todo" not in x]
+        if lista: query = query.filter(PriceHistory.competitor.in_(lista))
     
-    # --- LÓGICA DA BUSCA GLOBAL (O input de texto) ---
     if search:
         termo = f"%{search}%"
         query = query.filter(or_(
-            Product.name.ilike(termo),            # Busca no Produto
-            Product.brand.ilike(termo),           # Busca na Marca
-            Product.rim.ilike(termo),             # Busca no Aro (Ex: digita "14")
-            PriceHistory.competitor.ilike(termo), # Busca na Empresa (Ex: "PMZ")
-            PriceHistory.city.ilike(termo)        # Busca na Cidade
+            Product.name.ilike(termo), Product.brand.ilike(termo), Product.rim.ilike(termo),
+            PriceHistory.competitor.ilike(termo), PriceHistory.city.ilike(termo)
         ))
     return query
 
 @app.get("/dashboard-data")
-def get_dashboard_data(region: str=None, brand: str=None, rim: str=None, competitor: str=None, search: str=None, db: Session=Depends(get_db)):
+def get_dashboard_data(region: str=None, brand: str=None, rim: str=None, competitor: str=None, origin: str=None, search: str=None, db: Session=Depends(get_db)):
     query = db.query(PriceHistory, Product).join(Product)
-    query = aplicar_filtros(query, region, brand, rim, competitor, search)
+    query = aplicar_filtros(query, region, brand, rim, competitor, origin, search)
     results = query.order_by(desc(PriceHistory.date_collected)).all()
-    return [{"id": p.id, "produto": pr.name, "medida": pr.width, "marca": pr.brand, "aro": pr.rim, "concorrente": p.competitor, "city": p.city, "preco": p.price, "data": p.date_collected} for p, pr in results]
+    return [{"id": p.id, "produto": pr.name, "medida": pr.width, "marca": pr.brand, "aro": pr.rim, "origin": p.origin, "concorrente": p.competitor, "city": p.city, "preco": p.price, "sell_in": p.sell_in, "mkp": p.mkp, "data": p.date_collected} for p, pr in results]
 
 @app.get("/analytics")
-def get_analytics(region: str=None, brand: str=None, rim: str=None, competitor: str=None, search: str=None, db: Session=Depends(get_db)):
+def get_analytics(region: str=None, brand: str=None, rim: str=None, competitor: str=None, origin: str=None, search: str=None, db: Session=Depends(get_db)):
     query = db.query(PriceHistory).join(Product)
-    query = aplicar_filtros(query, region, brand, rim, competitor, search)
+    query = aplicar_filtros(query, region, brand, rim, competitor, origin, search)
 
     total = query.count()
     all_competitors = db.query(PriceHistory.competitor).distinct().all()
     competitors_list = sorted([c[0] for c in all_competitors if c[0]])
+    all_brands = db.query(Product.brand).distinct().all()
+    brands_list = sorted([b[0] for b in all_brands if b[0]])
 
     if total == 0:
-        return {"total": 0, "media": 0, "minimo": 0, "top_aro": "-", "top_concorrente": "-", "competitors_list": competitors_list}
+        return {"total": 0, "media": 0, "minimo": 0, "top_aro": "-", "top_concorrente": "-", "competitors_list": competitors_list, "brands_list": brands_list}
 
     media = query.with_entities(func.avg(PriceHistory.price)).scalar()
     minimo = query.with_entities(func.min(PriceHistory.price)).scalar()
-    
-    top_aro_q = db.query(Product.rim, func.count(PriceHistory.id)).join(Product)\
-        .filter(PriceHistory.id.in_([p.id for p in query.all()]))\
-        .group_by(Product.rim).order_by(desc(func.count(PriceHistory.id))).first()
+    top_aro_q = db.query(Product.rim, func.count(PriceHistory.id)).join(Product).filter(PriceHistory.id.in_([p.id for p in query.all()])).group_by(Product.rim).order_by(desc(func.count(PriceHistory.id))).first()
     aro_mais_vendido = top_aro_q[0] if top_aro_q else "-"
-
     mais_barato = query.order_by(PriceHistory.price.asc()).first()
     concorrente_top = mais_barato.competitor if mais_barato else "-"
 
-    return {"total": total, "media": round(media, 2), "minimo": round(minimo, 2), "top_aro": aro_mais_vendido, "top_concorrente": concorrente_top, "competitors_list": competitors_list}
+    return {"total": total, "media": round(media, 2), "minimo": round(minimo, 2), "top_aro": aro_mais_vendido, "top_concorrente": concorrente_top, "competitors_list": competitors_list, "brands_list": brands_list}
