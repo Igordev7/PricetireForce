@@ -44,12 +44,12 @@ export default function LoginPage() {
         
         {/* Logo e Título */}
         <div className="text-center mb-8">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 bg-yellow-500 rounded-full">
-              <Activity className="h-8 w-8 text-slate-900" />
-            </div>
-          </div>
-          <h1 className="text-2xl font-bold text-yellow-500">PRICE TIRE FORCE</h1>
+          
+          <img
+              src="/logo.jpeg" // O caminho para a sua imagem na pasta public
+              alt="Logo IntelligenceTyre PriceTyreForce"
+              className="h-25 w-100" // Ajuste a altura conforme necessário
+            />
           <p className="text-slate-400 text-sm mt-2">Inteligência de Mercado para Pneus</p>
         </div>
 

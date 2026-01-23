@@ -43,3 +43,5 @@ class PriceHistory(Base):
     price = Column(Float)
     date_collected = Column(DateTime, default=datetime.utcnow)
     source = Column(String)
+    region = Column(String, default="BR") # Ex: Norte, Sul
+    city = Column(String, default="")
