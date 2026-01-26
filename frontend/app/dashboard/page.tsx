@@ -89,6 +89,7 @@ export default function Dashboard() {
     const params = new URLSearchParams();
     if (filters.region !== 'Todas') params.append('region', filters.region);
     
+    // Converte Array para string separada por virgula
     if (filters.brand.length > 0) params.append('brand', filters.brand.join(','));
     if (filters.rim.length > 0) params.append('rim', filters.rim.join(','));
     if (filters.competitor.length > 0) params.append('competitor', filters.competitor.join(','));
@@ -97,12 +98,15 @@ export default function Dashboard() {
     if (filters.search) params.append('search', filters.search);
 
     try {
-      // AJUSTE SEU LINK AQUI
-      const res = await fetch(`https://pricetireforce.onrender.com/dashboard-data?${params.toString()}`);
+      // ADICIONEI { cache: 'no-store' } AQUI EMBAIXO
+      // Lembre-se de trocar o link para http://localhost:8000 se estiver testando local
+      // ou manter o do render se for o caso. Vou deixar localhost pq vc disse q ta no localhost.
+      const res = await fetch(`https://pricetireforce.onrender.com/dashboard-data?${params.toString()}`, { cache: 'no-store' });
       const json = await res.json();
       setData(json);
 
-      const resAnal = await fetch(`https://pricetireforce.onrender.com/analytics?${params.toString()}`);
+      // E AQUI TAMBÉM
+      const resAnal = await fetch(`https://pricetireforce.onrender.com/analytics?${params.toString()}`, { cache: 'no-store' });
       const jsonAnal = await resAnal.json();
       setAnalytics(jsonAnal);
     } catch (err) { console.error("Erro ao buscar dados", err); }
