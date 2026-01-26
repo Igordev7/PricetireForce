@@ -28,25 +28,27 @@ def get_db():
     finally:
         db.close()
 
-# --- MAPA DE NOMES ---
+# --- MAPA GENÉRICO (FALLBACK) ---
 MAPA_INTELIGENTE = {
     'brand': ['marca', 'brand', 'fabricante'],
     'model': ['modelo', 'model', 'pattern', 'desenho'],
     'width': ['medida', 'dimension', 'largura'],
     'rim': ['aro', 'rim', 'diametro', 'raio'],
     'price': ['preco_sell_out', 'preco sell out', 'sell out', 'sellout', 'preço venda', 'venda', 'valor'],
-    'cost': ['preço sell in', 'preco sell in', 'sell in', 'sellin', 'custo', 'compra'],
+    'cost': ['preco sell in', 'sell in', 'sellin', 'custo'],
     'origin': ['origem', 'origin', 'nacional', 'importado'],
-    'competitor': ['empresa', 'competitor', 'concorrente', 'loja', 'revenda'], # Prioridade alta
+    'competitor': ['empresa', 'competitor', 'concorrente', 'loja', 'revenda'], 
     'location': ['localidade', 'local', 'cidade/uf', 'region', 'city', 'cidade'],
     'date': ['data', 'date', 'data coleta', 'coleta'],
     'mkp': ['mkp', 'markup', 'margem']
 }
 
 ESTADO_PARA_REGIAO = {
-    'AM': 'NO', 'RR': 'NO', 'AP': 'NO', 'PA': 'NO', 'MT': 'CO', 'MS': 'CO', 'GO': 'CO', 'DF': 'CO',
-    'MA': 'NE', 'PI': 'NE', 'CE': 'NE', 'RN': 'NE', 'PB': 'NE', 'PE': 'NE', 'AL': 'NE', 'SE': 'NE', 'BA': 'NE',
-    'SP': 'SE', 'RJ': 'SE', 'ES': 'SE', 'MG': 'SE', 'PR': 'S', 'RS': 'S', 'SC': 'S'
+    'MT': 'CO', 'MS': 'CO', 'GO': 'CO', 'DF': 'CO',
+    'AM': 'NO', 'PA': 'NO', 'RO': 'NO', 'RR': 'NO', 'AC': 'NO', 'TO': 'NO', 'AP': 'NO',
+    'SP': 'SE', 'RJ': 'SE', 'MG': 'SE', 'ES': 'SE',
+    'PR': 'S', 'RS': 'S', 'SC': 'S',
+    'BA': 'NE', 'PE': 'NE', 'CE': 'NE' 
 }
 
 def limpar_aro(valor):
@@ -78,52 +80,62 @@ def tratar_preco(valor):
     try: return float(str(valor).replace('R$', '').replace(' ', '').replace(',', '.'))
     except: return 0.0
 
-# --- CÉREBRO DE COLUNAS (LÓGICA DE MELHOR CANDIDATO) ---
 def identificar_colunas(df):
+    cols = list(df.columns)
+    
+    # --- MAPEAMENTO FORÇADO (CORREÇÃO DEFINITIVA) ---
+    # Se encontrar essas colunas específicas da sua planilha, usa elas direto.
+    if 'Preco_Sell_Out' in cols and 'Empresa' in cols:
+        return {
+            'price': 'Preco_Sell_Out',
+            'competitor': 'Empresa',
+            'brand': 'Marca' if 'Marca' in cols else 'MARCA', # Prefere 'Marca' (concorrente)
+            'model': 'Modelo' if 'Modelo' in cols else 'MODELO',
+            'width': 'Medida' if 'Medida' in cols else 'MEDIDA',
+            'rim': 'Aro' if 'Aro' in cols else 'ARO',
+            'cost': 'PREÇO SELL IN',
+            'origin': 'ORIGEM' if 'ORIGEM' in cols else 'Origem',
+            'mkp': 'MKP',
+            'date': 'Data' if 'Data' in cols else 'DATA',
+            'location': 'Localidade' # Se tiver
+        }
+    
+    # --- LÓGICA AUTOMÁTICA (FALLBACK) ---
     colunas_encontradas = {}
-    cols_originais = list(df.columns)
-    cols_lower = [str(c).lower().strip() for c in cols_originais]
+    cols_lower = [str(c).lower().strip() for c in cols]
     
-    # 1. Acha Coluna de PREÇO DE VENDA (A Âncora)
-    # Procuramos termos de "Sell Out" explicitamente
-    idx_price = -1
+    idx_preco = -1
     melhor_pontuacao = -1
-    
     for i, col in enumerate(cols_lower):
         pontuacao = 0
-        if 'sell in' in col or 'custo' in col: continue # Pula custo
-        
+        if 'sell in' in col or 'custo' in col: continue
         if 'sell out' in col or 'sellout' in col: pontuacao += 100
-        elif 'preco' in col or 'preço' in col: pontuacao += 50
+        elif 'preco' in col and 'in' not in col: pontuacao += 50
         
         if pontuacao > melhor_pontuacao:
             melhor_pontuacao = pontuacao
-            colunas_encontradas['price'] = cols_originais[i]
-            idx_price = i
+            colunas_encontradas['price'] = cols[i]
+            idx_preco = i
 
-    if idx_price == -1: return None # Sem preço, sem jogo
+    if idx_preco == -1: return None
 
-    # 2. Para cada campo (Brand, Competitor, etc), escolhe a MELHOR coluna
-    # A melhor coluna é a que bate o nome E está mais perto do preço de venda
     for chave in ['brand', 'model', 'width', 'rim', 'competitor', 'location', 'date', 'cost', 'origin', 'mkp']:
-        possiveis_nomes = MAPA_INTELIGENTE.get(chave, [])
-        candidatos = []
-
-        for i, col in enumerate(cols_lower):
-            # Se for o próprio preço ou custo (quando procurando preço), ignora
-            if i == idx_price and chave == 'cost': continue
-
-            # Se contiver o nome buscado
-            if any(nome in col for nome in possiveis_nomes):
-                distancia = abs(i - idx_price)
-                # Se for nome EXATO, ganha bonus de prioridade (distancia negativa virtual)
-                if col in possiveis_nomes: distancia -= 1000 
-                candidatos.append((distancia, cols_originais[i]))
+        possiveis = MAPA_INTELIGENTE.get(chave, [])
+        melhor_distancia = 9999
+        col_escolhida = None
         
-        # Ordena candidatos pela menor distância (ou prioridade exata)
-        if candidatos:
-            candidatos.sort(key=lambda x: x[0])
-            colunas_encontradas[chave] = candidatos[0][1] # Pega o campeão
+        for i, col in enumerate(cols_lower):
+            if any(p in col for p in possiveis):
+                if chave == 'cost' and i == idx_preco: continue
+                
+                distancia = abs(i - idx_preco)
+                if col in possiveis: distancia -= 500 # Bonus match exato
+
+                if distancia < melhor_distancia:
+                    melhor_distancia = distancia
+                    col_escolhida = cols[i]
+        
+        if col_escolhida: colunas_encontradas[chave] = col_escolhida
 
     return colunas_encontradas
 
@@ -143,7 +155,7 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
     contents = await file.read()
     filename = file.filename.lower()
     
-    # Define local padrão
+    # Detecção de Cidade
     cidade_arq, regiao_arq = "Manaus", "NO"
     if "cuiaba" in filename or "cuiabá" in filename: cidade_arq, regiao_arq = "Cuiabá - MT", "CO"
     elif "sp" in filename: cidade_arq, regiao_arq = "São Paulo - SP", "SE"
@@ -154,23 +166,18 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
     except: return {"status": "erro", "message": "Arquivo ilegível."}
 
     mapa = identificar_colunas(df)
-    if not mapa or 'price' not in mapa or 'width' not in mapa:
-        return {"status": "erro", "message": "Colunas essenciais não identificadas."}
+    if not mapa or 'price' not in mapa:
+        return {"status": "erro", "message": "Colunas principais não encontradas."}
 
-    c = lambda k: mapa.get(k) # Atalho para pegar nome da coluna
+    c = lambda k: mapa.get(k)
     count = 0
-    
     for _, row in df.iterrows():
         try:
-            # Leituras
             marca = str(row[c('brand')]).upper().strip() if c('brand') else "GENÉRICA"
             modelo = str(row[c('model')]).upper().strip() if c('model') else "PADRÃO"
             medida = str(row[c('width')]).strip() if c('width') else "N/A"
             aro = limpar_aro(row[c('rim')] if c('rim') else "0")
-            
-            # Aqui vai pegar a coluna 'Empresa' correta agora
             competitor = limpar_empresa(row[c('competitor')] if c('competitor') else "Concorrente")
-            
             data_col = parse_data(row[c('date')]) if c('date') else datetime.now()
             
             origem = "-"
@@ -187,10 +194,8 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
                 try: v_mkp = float(str(row[c('mkp')]).replace(',', '.'))
                 except: v_mkp = 0.0
 
-            # Cidade: Se não tiver na coluna, usa a do arquivo
-            city = cidade_arq
-            region = regiao_arq
-            if c('location'):
+            city, region = cidade_arq, regiao_arq
+            if c('location') and c('location') in df.columns:
                 raw_l = str(row[c('location')]).strip()
                 if len(raw_l) > 2:
                     city = raw_l
@@ -215,12 +220,10 @@ async def upload_file(file: UploadFile = File(...), db: Session = Depends(get_db
     db.commit()
     return {"status": "sucesso", "mensagem": f"{count} registros importados. Local: {city}"}
 
-# --- FILTROS MULTIPLOS ---
 def aplicar_filtros(query, region, brand, rim, competitor, origin, search):
     if region and "Toda" not in region: query = query.filter(PriceHistory.region == region)
     if origin and "Toda" not in origin: query = query.filter(PriceHistory.origin == origin)
 
-    # Listas
     if brand and "Toda" not in brand:
         lista = [x for x in brand.split(',') if x and "Toda" not in x]
         if lista: query = query.filter(Product.brand.in_(lista))

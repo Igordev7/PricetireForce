@@ -7,7 +7,6 @@ const DropdownMultiSelect = ({ label, options, selected, onChange }: any) => {
   const [isOpen, setIsOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  // Fecha ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: any) => {
       if (ref.current && !ref.current.contains(event.target)) setIsOpen(false);
@@ -19,7 +18,6 @@ const DropdownMultiSelect = ({ label, options, selected, onChange }: any) => {
   return (
     <div className="relative" ref={ref}>
       <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">{label}</label>
-      
       <div 
         onClick={() => setIsOpen(!isOpen)}
         className="bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs text-slate-700 cursor-pointer flex justify-between items-center w-40 hover:border-blue-400 transition h-[38px]"
@@ -65,35 +63,19 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [companyName, setCompanyName] = useState('Visitante');
 
-  // --- ESTADO PARA OS KPIs (INTELIGÊNCIA) ---
   const [analytics, setAnalytics] = useState({
-    total: 0, 
-    media: 0, 
-    minimo: 0, 
-    top_aro: '-', 
-    top_concorrente: '-', 
-    competitors_list: [],
-    brands_list: [] 
+    total: 0, media: 0, minimo: 0, top_aro: '-', top_concorrente: '-', competitors_list: [], brands_list: [] 
   });
 
-  // ESTADOS DOS FILTROS
   const [filters, setFilters] = useState<any>({
-    region: 'Todas',
-    brand: [],      // Array para multiplas marcas
-    rim: [],        // Array para multiplos aros
-    competitor: [], // Array para multiplas empresas
-    search: '',
-    origin: 'Todos'
+    region: 'Todas', brand: [], rim: [], competitor: [], search: '', origin: 'Todos'
   });
 
-  // Função Lógica do Filtro Customizado
   const handleFilterChange = (key: string, value: string) => {
     let newSelected = [...filters[key]];
-    
     if (value === 'Todos') {
-        newSelected = []; // Limpa tudo
+        newSelected = [];
     } else {
-        // Se já tem, remove. Se não tem, adiciona.
         if (newSelected.includes(value)) {
             newSelected = newSelected.filter(item => item !== value);
         } else {
@@ -107,7 +89,6 @@ export default function Dashboard() {
     const params = new URLSearchParams();
     if (filters.region !== 'Todas') params.append('region', filters.region);
     
-    // Converte Array para string separada por virgula (ex: "Pirelli,Michelin")
     if (filters.brand.length > 0) params.append('brand', filters.brand.join(','));
     if (filters.rim.length > 0) params.append('rim', filters.rim.join(','));
     if (filters.competitor.length > 0) params.append('competitor', filters.competitor.join(','));
@@ -116,6 +97,7 @@ export default function Dashboard() {
     if (filters.search) params.append('search', filters.search);
 
     try {
+      // AJUSTE SEU LINK AQUI
       const res = await fetch(`https://pricetireforce.onrender.com/dashboard-data?${params.toString()}`);
       const json = await res.json();
       setData(json);
@@ -143,6 +125,7 @@ export default function Dashboard() {
     const formData = new FormData();
     formData.append('file', file);
     try {
+      // AJUSTE SEU LINK AQUI
       const res = await fetch('https://pricetireforce.onrender.com/upload', { method: 'POST', body: formData });
       const result = await res.json();
       alert(result.mensagem);
@@ -176,13 +159,10 @@ export default function Dashboard() {
             <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" accept=".csv, .xlsx"/>
           </div>
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 opacity-60"><div className="p-4 bg-purple-50 rounded-full text-purple-600"><Search size={24} /></div><div><h3 className="font-bold text-slate-800">Nova Coleta Manual</h3><p className="text-xs text-slate-500">Em breve</p></div></div>
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 hover:shadow-md transition"><div className="p-4 bg-green-50 rounded-full text-green-600"><FileSpreadsheet size={24} /></div><div><h3 className="font-bold text-slate-800">Baixar Relatório</h3><p className="text-xs text-slate-500">Exportar para PDF/Excel</p></div></div>
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200 flex items-center gap-4 hover:shadow-md transition opacity-60"><div className="p-4 bg-green-50 rounded-full text-green-600"><FileSpreadsheet size={24} /></div><div><h3 className="font-bold text-slate-800">Baixar Relatório</h3><p className="text-xs text-slate-500">Exportar para PDF/Excel</p></div></div>
         </div>
 
-        {/* --- ÁREA DE FILTROS --- */}
         <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm mb-6 flex flex-wrap gap-4 items-end">
-            
-            {/* INPUT DE BUSCA */}
             <div className="w-full md:w-64">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1 block">Busca Global</label>
                 <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded px-3 py-2 focus-within:border-blue-500 transition h-[38px]">
@@ -193,29 +173,10 @@ export default function Dashboard() {
 
             <div className="hidden md:block w-px h-8 bg-slate-200 mx-2 self-center"></div>
 
-            {/* FILTROS COM DROPDOWN CUSTOMIZADO */}
-            <DropdownMultiSelect 
-                label="Empresas" 
-                options={analytics.competitors_list || []} 
-                selected={filters.competitor} 
-                onChange={(val: string) => handleFilterChange('competitor', val)}
-            />
+            <DropdownMultiSelect label="Empresas" options={analytics.competitors_list || []} selected={filters.competitor} onChange={(val: string) => handleFilterChange('competitor', val)}/>
+            <DropdownMultiSelect label="Marcas" options={analytics.brands_list || []} selected={filters.brand} onChange={(val: string) => handleFilterChange('brand', val)}/>
+            <DropdownMultiSelect label="Aros" options={['13','14','15','16','17','18','19','20','21','22']} selected={filters.rim} onChange={(val: string) => handleFilterChange('rim', val)}/>
 
-            <DropdownMultiSelect 
-                label="Marcas" 
-                options={analytics.brands_list || []} 
-                selected={filters.brand} 
-                onChange={(val: string) => handleFilterChange('brand', val)}
-            />
-
-            <DropdownMultiSelect 
-                label="Aros" 
-                options={['13','14','15','16','17','18','19','20','21','22']} 
-                selected={filters.rim} 
-                onChange={(val: string) => handleFilterChange('rim', val)}
-            />
-
-            {/* FILTRO ORIGEM */}
             <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Origem</label>
                 <select className="bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs outline-none focus:border-blue-500 cursor-pointer h-[38px] w-32" value={filters.origin} onChange={(e) => setFilters({...filters, origin: e.target.value})}>
@@ -223,7 +184,6 @@ export default function Dashboard() {
                 </select>
             </div>
 
-            {/* FILTRO REGIÃO */}
             <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Região</label>
                 <select className="bg-slate-50 border border-slate-200 rounded px-3 py-2 text-xs outline-none focus:border-blue-500 cursor-pointer h-[38px] w-32" value={filters.region} onChange={(e) => setFilters({...filters, region: e.target.value})}>
@@ -232,13 +192,10 @@ export default function Dashboard() {
             </div>
 
             {(filters.region !== 'Todas' || filters.brand.length > 0 || filters.rim.length > 0 || filters.competitor.length > 0 || filters.origin !== 'Todos' || filters.search !== '') && (
-               <button onClick={() => window.location.reload()} className="text-xs text-red-500 hover:underline ml-auto mb-2 font-medium">
-                 Limpar Filtros
-               </button>
+               <button onClick={() => window.location.reload()} className="text-xs text-red-500 hover:underline ml-auto mb-2 font-medium">Limpar Filtros</button>
             )}
         </div>
 
-        {/* KPIs */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-center">
                 <span className="text-xs text-slate-400 font-bold uppercase mb-1 flex items-center gap-1"><DollarSign size={12}/> Preço Médio</span>
@@ -259,42 +216,64 @@ export default function Dashboard() {
             </div>
         </div>
 
-        {/* TABELA */}
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
               <table className="min-w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-xs">
+                  {/* ORDEM DAS COLUNAS ATUALIZADA */}
                   <tr>
+                    <th className="px-5 py-4 border-b">Descrição da Medida</th>
+                    <th className="px-5 py-4 border-b">Empresa</th>
+                    <th className="px-5 py-4 border-b text-slate-500">Sell In</th>
                     <th className="px-5 py-4 border-b">Medida</th>
-                    <th className="px-5 py-4 border-b">Modelo</th>
                     <th className="px-5 py-4 border-b">Marca</th>
+                    <th className="px-5 py-4 border-b">Modelo</th>
                     <th className="px-5 py-4 border-b">Origem</th>
                     <th className="px-5 py-4 border-b text-center">Aro</th>
-                    <th className="px-5 py-4 border-b text-slate-500">Sell In (Custo)</th>
-                    <th className="px-5 py-4 border-b">Sell Out (Venda)</th>
+                    <th className="px-5 py-4 border-b">Sell Out</th>
                     <th className="px-5 py-4 border-b">MKP (%)</th>
-                    <th className="px-5 py-4 border-b">Empresa</th>
                     <th className="px-5 py-4 border-b">Localidade</th>
                     <th className="px-5 py-4 border-b">Data</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {data.length === 0 ? (
-                      <tr><td colSpan={11} className="text-center py-10 text-slate-400">Nenhum dado encontrado.</td></tr>
+                      <tr><td colSpan={12} className="text-center py-10 text-slate-400">Nenhum dado encontrado.</td></tr>
                   ) : (
                     data.map((item) => {
                       const dataObj = new Date(item.data);
                       const dataFormatada = dataObj.toLocaleDateString('pt-BR');
+                      // Lógica do modelo limpo mantida
                       let modeloLimpo = item.produto.replace(item.marca, '').replace(item.medida, '').replace(item.aro, '').trim();
                       if (modeloLimpo.length < 2) modeloLimpo = "PADRÃO";
 
                       return (
                         <tr key={item.id} className="hover:bg-blue-50 transition duration-150 group">
-                          <td className="px-5 py-3 font-bold text-slate-700 whitespace-nowrap">{item.medida}</td>
-                          <td className="px-5 py-3 text-slate-500 text-xs font-medium uppercase tracking-wide">{modeloLimpo}</td>
+                          {/* 1. Descrição (Produto Completo) */}
+                          <td className="px-5 py-3 font-bold text-slate-700 whitespace-nowrap">{item.produto}</td>
+
+                          {/* 2. Empresa */}
+                          <td className="px-5 py-3 text-slate-600 text-xs font-medium">{item.concorrente}</td>
+
+                          {/* 3. Sell In (Custo) */}
+                          <td className="px-5 py-3">
+                              {item.sell_in && item.sell_in > 0 ? (
+                                  <span className="text-slate-500 font-bold ">R$ {item.sell_in.toFixed(2).replace('.', ',')}</span>
+                              ) : (
+                                  <span className="text-slate-300">-</span>
+                              )}
+                          </td>
+
+                          {/* 4. Medida */}
+                          <td className="px-5 py-3 text-slate-600 text-xs">{item.medida}</td>
+                          
+                          {/* 5. Marca */}
                           <td className="px-5 py-3"><span className="px-2 py-1 rounded bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200">{item.marca}</span></td>
                           
-                          {/* Coluna Origem */}
+                          {/* 6. Modelo */}
+                          <td className="px-5 py-3 text-slate-500 text-xs font-medium uppercase tracking-wide">{modeloLimpo}</td>
+                          
+                          {/* 7. Origem */}
                           <td className="px-5 py-3">
                               {item.origin === 'NACIONAL' ? 
                                 <span className="text-blue-600 text-xs font-bold flex items-center gap-1"><Globe size={10}/> NAC</span> : 
@@ -302,31 +281,25 @@ export default function Dashboard() {
                               }
                           </td>
 
+                          {/* 8. Aro */}
                           <td className="px-5 py-3 text-center text-slate-600 font-medium">{item.aro}</td>
                           
-                          {/* Coluna Sell In */}
-                          <td className="px-5 py-3">
-                              {item.sell_in && item.sell_in > 0 ? (
-                                  <span className="text-slate-500 font-medium">R$ {item.sell_in.toFixed(2).replace('.', ',')}</span>
-                              ) : (
-                                  <span className="text-slate-300">-</span>
-                              )}
-                          </td>
-
-                          {/* Coluna Sell Out */}
+                          {/* 9. Sell Out (Venda) */}
                           <td className="px-5 py-3">
                             <div className={`font-bold text-base ${item.preco < analytics.media ? 'text-green-600' : 'text-slate-800'}`}>
                               R$ {item.preco.toFixed(2).replace('.', ',')}
                             </div>
                           </td>
 
-                          {/* Coluna MKP */}
+                          {/* 10. MKP */}
                           <td className="px-5 py-3">
                              {item.mkp ? <span className="font-mono text-xs text-blue-600 font-bold">{(item.mkp * 100).toFixed(1)}%</span> : '-'}
                           </td>
 
-                          <td className="px-5 py-3 text-slate-600 text-xs font-medium">{item.concorrente}</td>
+                          {/* 11. Localidade */}
                           <td className="px-5 py-3 text-slate-500 text-xs">{item.city}</td>
+
+                          {/* 12. Data */}
                           <td className="px-5 py-3 text-slate-400 text-xs whitespace-nowrap"><div className="flex items-center gap-1"><Calendar size={12}/> {dataFormatada}</div></td>
                         </tr>
                       );
